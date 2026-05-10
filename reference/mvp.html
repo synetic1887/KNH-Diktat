@@ -1,0 +1,1273 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kanzlei-Diktat — MVP</title>
+<style>
+  :root{
+    --bg:#f5f3ee;
+    --panel:#ffffff;
+    --ink:#1c1c1c;
+    --muted:#6b6b6b;
+    --line:#dcd7cc;
+    --accent:#7a1f1f;        /* Bordeaux, klassisch juristisch */
+    --accent-soft:#f4e7e4;
+    --ok:#2f7d3a;
+    --warn:#b86b00;
+    --err:#a52828;
+    --chip:#efeae0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+    font-size:14px;
+    line-height:1.45;
+  }
+  header.topbar{
+    display:flex;align-items:center;gap:14px;
+    padding:10px 18px;
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+    position:sticky;top:0;z-index:5;
+  }
+  header.topbar h1{
+    font-family:"Iowan Old Style",Georgia,serif;
+    font-size:18px;margin:0;letter-spacing:.2px;
+  }
+  header.topbar .spacer{flex:1}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 10px;border-radius:999px;
+    background:var(--chip);font-size:12px;color:var(--muted);
+    border:1px solid var(--line);
+  }
+  .pill.live{background:#fde7e7;color:var(--err);border-color:#f3c8c8}
+  .pill.idle{background:#eef1ec;color:var(--muted)}
+  .pill.busy{background:#eef0fa;color:#3a4ba4;border-color:#cdd2ec}
+  .pill.busy .dot{background:#3a4ba4;animation:pulse .9s infinite}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  .pill.live .dot{background:var(--err);animation:pulse 1s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  select,button,input{
+    font:inherit;color:inherit;
+  }
+  button{
+    border:1px solid var(--line);background:#fff;
+    padding:6px 12px;border-radius:6px;cursor:pointer;
+  }
+  button:hover{background:#faf7f0}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover{filter:brightness(1.05)}
+  button.ghost{background:transparent}
+  button[disabled]{opacity:.5;cursor:not-allowed}
+  select{
+    border:1px solid var(--line);background:#fff;padding:6px 8px;border-radius:6px;
+  }
+
+  main.app{
+    display:grid;grid-template-columns:380px 1fr;gap:0;
+    height:calc(100vh - 49px);
+  }
+
+  /* LEFT: dictation pane */
+  .left{
+    border-right:1px solid var(--line);
+    background:var(--panel);
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+  .left .controls{
+    padding:14px 16px;border-bottom:1px solid var(--line);
+  }
+  .recbtn{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    width:100%;padding:14px;border-radius:10px;
+    background:var(--accent);color:#fff;border:none;cursor:pointer;
+    font-weight:600;font-size:15px;
+  }
+  .recbtn.recording{background:#2c2c2c}
+  .recbtn .mic{
+    width:18px;height:18px;border-radius:50%;
+    background:#fff;display:inline-block;
+    box-shadow:0 0 0 3px rgba(255,255,255,.35);
+  }
+  .recbtn.recording .mic{background:#ff5757;animation:pulse 1.1s infinite}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+
+  .left .transcript{
+    flex:1;overflow:auto;padding:14px 16px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:13px;color:#333;
+  }
+  .transcript .interim{color:var(--muted);font-style:italic}
+  .transcript .final{color:#1c1c1c}
+  .transcript .cmd{color:var(--accent);font-weight:600}
+
+  .commands{
+    border-top:1px solid var(--line);padding:12px 16px;
+    background:#faf8f3;max-height:240px;overflow:auto;
+  }
+  .commands h4{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .commands ul{list-style:none;padding:0;margin:0;font-size:12.5px}
+  .commands li{padding:2px 0}
+  .commands code{background:var(--chip);padding:1px 6px;border-radius:4px;font-size:12px}
+
+  /* RIGHT: live preview */
+  .right{
+    overflow:auto;padding:24px 32px;
+    background:var(--bg);
+  }
+  .doc-toolbar{
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    margin-bottom:16px;
+  }
+  .doc{
+    background:#fff;
+    max-width:780px;margin:0 auto;
+    box-shadow:0 1px 0 rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);
+    border:1px solid var(--line);
+    padding:60px 70px;min-height:1000px;
+    font-family:"Iowan Old Style",Georgia,"Times New Roman",serif;
+    font-size:15px;line-height:1.6;
+  }
+  .doc h2{
+    font-family:inherit;font-size:18px;margin:24px 0 8px;
+    border-bottom:1px solid var(--line);padding-bottom:4px;
+    color:#3a3a3a;
+  }
+  .doc .section{
+    padding:6px 8px;margin:0 -8px;border-radius:4px;
+    border:1px solid transparent;cursor:pointer;
+    min-height:24px;
+    white-space:pre-wrap;
+  }
+  .doc .section:hover{background:#fafafa}
+  .doc .section.active{
+    background:var(--accent-soft);
+    border-color:#e9c8c2;
+  }
+  .doc .section.empty::before{
+    content:attr(data-placeholder);
+    color:#bdb6a8;font-style:italic;
+  }
+  .doc .meta{
+    display:grid;grid-template-columns:140px 1fr;gap:6px 14px;
+    font-size:14px;
+  }
+  .doc .meta label{color:var(--muted);font-style:italic}
+  .doc .rubrum{
+    border:1px solid var(--line);padding:14px 18px;border-radius:6px;
+    background:#fcfbf7;margin-bottom:18px;
+  }
+
+  /* Settings dialog */
+  dialog{
+    border:1px solid var(--line);border-radius:10px;padding:0;
+    width:min(520px,92vw);
+  }
+  dialog::backdrop{background:rgba(0,0,0,.35)}
+  dialog .dh{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600}
+  dialog .db{padding:16px 18px}
+  dialog .df{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+  dialog label.row{display:block;margin:8px 0}
+  dialog input[type=text],dialog input[type=password],dialog textarea{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
+    font:inherit;
+  }
+  .warn{
+    background:#fff7e8;border:1px solid #f0d9a8;color:#7a4f00;
+    padding:8px 10px;border-radius:6px;font-size:12.5px;margin:8px 0;
+  }
+
+  /* Toast */
+  .toast{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:#1c1c1c;color:#fff;padding:10px 16px;border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:13px;
+    opacity:0;transition:opacity .25s;
+    z-index:50;
+  }
+  .toast.show{opacity:1}
+  .badge{font-size:11px;padding:2px 6px;background:var(--chip);border-radius:4px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Kanzlei-Diktat</h1>
+  <span class="badge">MVP</span>
+
+  <span style="margin-left:14px">Vorlage:</span>
+  <select id="tplSelect">
+    <option value="schriftsatz">Schriftsatz / Klage</option>
+    <option value="brief">Mandantenbrief</option>
+    <option value="vermerk">Aktenvermerk</option>
+  </select>
+
+  <span class="spacer"></span>
+
+  <span class="pill idle" id="recPill"><span class="dot"></span><span>Bereit</span></span>
+  <button class="ghost" id="btnSettings">Einstellungen</button>
+  <button class="ghost" id="btnExport">Export .docx</button>
+  <button class="ghost" id="btnNew">Neu</button>
+</header>
+
+<main class="app">
+
+  <aside class="left">
+    <div id="envBanner" style="display:none;background:#fff7e8;border-bottom:1px solid #f0d9a8;color:#7a4f00;padding:10px 14px;font-size:12.5px;line-height:1.5"></div>
+    <div class="controls">
+      <button class="recbtn" id="recBtn">
+        <span class="mic"></span><span id="recLabel">Diktat starten</span>
+      </button>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button id="btnMicTest" class="ghost" style="flex:1;font-size:12px">🎤 Mikro testen</button>
+        <button id="btnDiag" class="ghost" style="flex:1;font-size:12px">🔧 Diagnose</button>
+      </div>
+      <div class="hint">
+        Aktive Sektion: <strong id="activeLabel">—</strong><br/>
+        Sprache: de-DE · Chrome/Edge empfohlen
+      </div>
+    </div>
+
+    <div class="transcript" id="transcript"></div>
+
+    <div class="commands">
+      <h4>Sprachbefehle</h4>
+      <ul>
+        <li><code>neuer absatz</code> · <code>punkt</code> · <code>komma</code> · <code>doppelpunkt</code> · <code>fragezeichen</code></li>
+        <li><code>springe zu rubrum / antrag / begründung / sachverhalt / anrede / betreff …</code></li>
+        <li><code>nächste sektion</code> · <code>vorherige sektion</code></li>
+        <li><code>ersetze [X] durch [Y]</code> — schnelle, lokale Ersetzung</li>
+        <li><code>lösche letztes wort</code> · <code>lösche letzten satz</code> · <code>lösche absatz</code></li>
+        <li><code>rückgängig</code></li>
+        <li><code>formulieren</code> — KI poliert aktuelle Sektion</li>
+        <li><code>vorlage schriftsatz / brief / vermerk</code></li>
+        <li><code>stopp</code> — Diktat beenden</li>
+      </ul>
+      <h4 style="margin-top:10px">Freie KI-Korrektur</h4>
+      <ul>
+        <li>„<em>korrigiere den Namen am Anfang von Müller zu Meier</em>"</li>
+        <li>„<em>ändere das Datum oben auf den 12. Juni 2026</em>"</li>
+        <li>„<em>im Antrag soll es nicht 5.000 €, sondern 7.500 € heißen</em>"</li>
+        <li>„<em>streiche den letzten Satz im Sachverhalt</em>"</li>
+        <li>„<em>schreibe stattdessen ‚der Beklagte' statt ‚der Kläger'</em>"</li>
+      </ul>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">
+        Erkennt Korrektur-Intent automatisch und schickt die aktive Anweisung zusammen mit dem Dokument an die KI. Edits werden direkt im Preview angewendet — und sind per <code>rückgängig</code> reversibel.
+      </div>
+    </div>
+  </aside>
+
+  <section class="right">
+    <div class="doc-toolbar">
+      <button id="btnFormulate" class="primary">✎ KI: Sektion formulieren</button>
+      <button id="btnUndo" class="ghost">↶ Rückgängig</button>
+      <span class="spacer" style="flex:1"></span>
+      <span class="badge" id="docHint">Klicke eine Sektion, um sie zum Diktat-Ziel zu machen</span>
+    </div>
+    <div class="doc" id="doc"></div>
+  </section>
+
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <div class="dh">KI-Einstellungen</div>
+    <div class="db">
+      <div class="warn">
+        <strong>Datenschutz / Berufsrecht:</strong> Für den produktiven Einsatz API-Aufrufe <em>nicht</em> aus dem Browser, sondern über ein eigenes Backend (z.B. innerhalb der EU, mit Auftragsverarbeitungsvertrag) leiten. Dieser MVP speichert den Schlüssel nur lokal im Browser (localStorage).
+      </div>
+      <label class="row">Provider
+        <select id="cfgProvider">
+          <option value="anthropic">Anthropic (Claude) — direkter Browser-Aufruf</option>
+          <option value="custom">Eigenes Backend / OpenAI-kompatibel</option>
+          <option value="demo">Demo-Modus (keine KI, nur Regelwerk)</option>
+        </select>
+      </label>
+      <label class="row">API-URL
+        <input type="text" id="cfgUrl" placeholder="https://api.anthropic.com/v1/messages" />
+      </label>
+      <label class="row">API-Key
+        <input type="password" id="cfgKey" placeholder="sk-ant-... oder Bearer-Token" />
+      </label>
+      <label class="row">Modell
+        <input type="text" id="cfgModel" placeholder="claude-sonnet-4-6" />
+      </label>
+      <label class="row">System-Prompt (juristischer Stil)
+        <textarea id="cfgSystem" rows="4"></textarea>
+      </label>
+    </div>
+    <div class="df">
+      <button value="cancel">Abbrechen</button>
+      <button value="save" class="primary" id="cfgSave">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Templates ---------- */
+const TEMPLATES = {
+  schriftsatz: {
+    title: "Schriftsatz",
+    sections: [
+      { id:"rubrum_klaeger",  label:"Kläger",       kind:"meta",     placeholder:"Name, Anschrift des Klägers" },
+      { id:"rubrum_beklagter",label:"Beklagter",    kind:"meta",     placeholder:"Name, Anschrift des Beklagten" },
+      { id:"rubrum_az",       label:"Aktenzeichen", kind:"meta",     placeholder:"z.B. 12 O 345/26" },
+      { id:"rubrum_gericht",  label:"Gericht",      kind:"meta",     placeholder:"z.B. Landgericht Berlin" },
+      { id:"antraege",        label:"Anträge",      kind:"prose",    placeholder:"Wir beantragen, …" },
+      { id:"sachverhalt",     label:"Sachverhalt",  kind:"prose",    placeholder:"Die Parteien streiten über …" },
+      { id:"begruendung",     label:"Rechtliche Würdigung", kind:"prose", placeholder:"Der Anspruch ergibt sich aus …" },
+      { id:"beweise",         label:"Beweisangebote", kind:"prose",  placeholder:"Beweis: Zeuge …" },
+      { id:"schluss",         label:"Schluss",      kind:"prose",    placeholder:"Wir bitten um Termin zur mündlichen Verhandlung." },
+    ],
+    aliases: {
+      "rubrum":"rubrum_klaeger","kläger":"rubrum_klaeger","klaeger":"rubrum_klaeger",
+      "beklagter":"rubrum_beklagter","beklagten":"rubrum_beklagter",
+      "aktenzeichen":"rubrum_az","az":"rubrum_az",
+      "gericht":"rubrum_gericht",
+      "antrag":"antraege","anträge":"antraege","antraege":"antraege",
+      "sachverhalt":"sachverhalt","tatbestand":"sachverhalt",
+      "begründung":"begruendung","begruendung":"begruendung","würdigung":"begruendung","wuerdigung":"begruendung",
+      "beweise":"beweise","beweis":"beweise","beweisangebot":"beweise","beweisangebote":"beweise",
+      "schluss":"schluss","schlussformel":"schluss",
+    }
+  },
+  brief: {
+    title: "Mandantenbrief",
+    sections: [
+      { id:"empfaenger", label:"Empfänger",  kind:"meta",  placeholder:"Anschrift des Empfängers" },
+      { id:"datum",      label:"Datum",      kind:"meta",  placeholder:"z.B. 10.05.2026" },
+      { id:"unser_az",   label:"Unser AZ",   kind:"meta",  placeholder:"interne Aktennummer" },
+      { id:"betreff",    label:"Betreff",    kind:"meta",  placeholder:"Mandat / Bezugnahme" },
+      { id:"anrede",     label:"Anrede",     kind:"meta",  placeholder:"Sehr geehrte/r …" },
+      { id:"text",       label:"Text",       kind:"prose", placeholder:"Fließtext des Schreibens" },
+      { id:"gruss",      label:"Grußformel", kind:"meta",  placeholder:"Mit freundlichen Grüßen" },
+    ],
+    aliases: {
+      "empfänger":"empfaenger","empfaenger":"empfaenger","adresse":"empfaenger",
+      "datum":"datum","aktenzeichen":"unser_az","az":"unser_az",
+      "betreff":"betreff","anrede":"anrede","text":"text","fließtext":"text","fliesstext":"text",
+      "grußformel":"gruss","gruss":"gruss","grußformel":"gruss",
+    }
+  },
+  vermerk: {
+    title: "Aktenvermerk",
+    sections: [
+      { id:"datum",   label:"Datum / Uhrzeit", kind:"meta",  placeholder:"z.B. 10.05.2026, 14:30" },
+      { id:"mandant", label:"Mandant / AZ",    kind:"meta",  placeholder:"Mandantenname, Aktenzeichen" },
+      { id:"anlass",  label:"Anlass",          kind:"meta",  placeholder:"Telefonat / Besprechung / Recherche" },
+      { id:"inhalt",  label:"Inhalt",          kind:"prose", placeholder:"Gesprächs- bzw. Vermerkinhalt …" },
+      { id:"ergebnis",label:"Ergebnis / Maßnahmen", kind:"prose", placeholder:"Nächste Schritte, Fristen, Verantwortliche" },
+    ],
+    aliases: {
+      "datum":"datum","mandant":"mandant","aktenzeichen":"mandant","az":"mandant",
+      "anlass":"anlass","inhalt":"inhalt","gesprächsinhalt":"inhalt",
+      "ergebnis":"ergebnis","maßnahmen":"ergebnis","massnahmen":"ergebnis",
+    }
+  }
+};
+
+/* ---------- State ---------- */
+const state = {
+  template: "schriftsatz",
+  doc: {},                // sectionId -> text
+  activeId: null,
+  history: [],            // for undo
+  recording: false,
+  config: loadConfig(),
+};
+
+function loadConfig(){
+  try{
+    return JSON.parse(localStorage.getItem("kd_cfg")||"") || defaultConfig();
+  }catch(e){ return defaultConfig(); }
+}
+function defaultConfig(){
+  return {
+    provider: "anthropic",
+    url: "https://api.anthropic.com/v1/messages",
+    key: "",
+    model: "claude-sonnet-4-6",
+    system: "Du bist ein juristisches Schreib-Assistent für eine deutsche Rechtsanwaltskanzlei. Bringe diktierten Rohtext in einen knappen, präzisen, sachlichen juristischen Stil. Verwende korrekte Fachterminologie, vermeide Redundanzen, bewahre alle Tatsacheninhalte und Zitate. Antworte ausschließlich mit dem überarbeiteten Text, ohne Vorrede."
+  };
+}
+function saveConfig(){ localStorage.setItem("kd_cfg", JSON.stringify(state.config)); }
+
+/* ---------- Rendering ---------- */
+const $doc = document.getElementById("doc");
+const $activeLabel = document.getElementById("activeLabel");
+const $tpl = document.getElementById("tplSelect");
+
+function initDoc(){
+  state.doc = {};
+  for(const s of TEMPLATES[state.template].sections){
+    state.doc[s.id] = "";
+  }
+  state.activeId = TEMPLATES[state.template].sections[0].id;
+  state.history = [];
+  render();
+}
+
+function render(){
+  const t = TEMPLATES[state.template];
+  $doc.innerHTML = "";
+  // Title
+  const h = document.createElement("h2");
+  h.textContent = t.title;
+  $doc.appendChild(h);
+
+  // Group meta as rubrum-style block for schriftsatz
+  if(state.template === "schriftsatz"){
+    const meta = document.createElement("div");
+    meta.className = "rubrum";
+    const grid = document.createElement("div");
+    grid.className = "meta";
+    for(const s of t.sections.filter(x=>x.kind==="meta")){
+      const lab = document.createElement("label"); lab.textContent = s.label;
+      const val = document.createElement("div");
+      val.className = "section" + (s.id===state.activeId?" active":"") + (state.doc[s.id]?"":" empty");
+      val.dataset.id = s.id;
+      val.dataset.placeholder = s.placeholder;
+      val.textContent = state.doc[s.id];
+      val.addEventListener("click", () => setActive(s.id));
+      grid.appendChild(lab); grid.appendChild(val);
+    }
+    meta.appendChild(grid);
+    $doc.appendChild(meta);
+    for(const s of t.sections.filter(x=>x.kind!=="meta")){
+      const h2 = document.createElement("h2"); h2.textContent = s.label;
+      const div = document.createElement("div");
+      div.className = "section" + (s.id===state.activeId?" active":"") + (state.doc[s.id]?"":" empty");
+      div.dataset.id = s.id;
+      div.dataset.placeholder = s.placeholder;
+      div.textContent = state.doc[s.id];
+      div.addEventListener("click", () => setActive(s.id));
+      $doc.appendChild(h2); $doc.appendChild(div);
+    }
+  } else {
+    // brief & vermerk: simpler stacked layout, meta first
+    const meta = document.createElement("div");
+    meta.className = "rubrum";
+    const grid = document.createElement("div");
+    grid.className = "meta";
+    let hasMeta = false;
+    for(const s of t.sections.filter(x=>x.kind==="meta")){
+      hasMeta = true;
+      const lab = document.createElement("label"); lab.textContent = s.label;
+      const val = document.createElement("div");
+      val.className = "section" + (s.id===state.activeId?" active":"") + (state.doc[s.id]?"":" empty");
+      val.dataset.id = s.id;
+      val.dataset.placeholder = s.placeholder;
+      val.textContent = state.doc[s.id];
+      val.addEventListener("click", () => setActive(s.id));
+      grid.appendChild(lab); grid.appendChild(val);
+    }
+    if(hasMeta){ meta.appendChild(grid); $doc.appendChild(meta); }
+    for(const s of t.sections.filter(x=>x.kind!=="meta")){
+      const h2 = document.createElement("h2"); h2.textContent = s.label;
+      const div = document.createElement("div");
+      div.className = "section" + (s.id===state.activeId?" active":"") + (state.doc[s.id]?"":" empty");
+      div.dataset.id = s.id;
+      div.dataset.placeholder = s.placeholder;
+      div.textContent = state.doc[s.id];
+      div.addEventListener("click", () => setActive(s.id));
+      $doc.appendChild(h2); $doc.appendChild(div);
+    }
+  }
+
+  // Update label
+  const sec = t.sections.find(s=>s.id===state.activeId);
+  $activeLabel.textContent = sec ? sec.label : "—";
+}
+
+function setActive(id){
+  state.activeId = id;
+  render();
+  log(`<span class="cmd">→ aktive Sektion: ${TEMPLATES[state.template].sections.find(s=>s.id===id).label}</span>`);
+}
+
+/* ---------- Snapshot for undo ---------- */
+function snapshot(){
+  state.history.push(JSON.stringify({ doc: state.doc, activeId: state.activeId }));
+  if(state.history.length>50) state.history.shift();
+}
+function undo(){
+  const prev = state.history.pop();
+  if(!prev){ toast("Nichts zum Rückgängigmachen"); return; }
+  const s = JSON.parse(prev);
+  state.doc = s.doc; state.activeId = s.activeId;
+  render(); toast("Rückgängig");
+}
+
+/* ---------- Append text into active section ---------- */
+function append(text){
+  if(!state.activeId) return;
+  snapshot();
+  const cur = state.doc[state.activeId] || "";
+  const sep = (cur && !cur.endsWith(" ") && !cur.endsWith("\n") && !text.startsWith(" ") && !text.startsWith("\n") && !".,;:!?".includes(text[0])) ? " " : "";
+  state.doc[state.activeId] = cur + sep + text;
+  render();
+}
+
+/* ---------- Voice command parser ---------- */
+function tryCommand(raw){
+  const text = raw.trim().toLowerCase().replace(/[\.\!\?]+$/,"");
+  if(!text) return false;
+
+  // simple punctuation tokens (when said in isolation)
+  const punct = {
+    "punkt":".", "komma":",", "doppelpunkt":":", "semikolon":";",
+    "fragezeichen":"?", "ausrufezeichen":"!", "anführungszeichen":'"',
+  };
+  if(punct[text]){ append(punct[text]); return true; }
+
+  if(text === "neuer absatz" || text === "absatz"){
+    snapshot();
+    state.doc[state.activeId] = (state.doc[state.activeId]||"") + "\n\n";
+    render(); return true;
+  }
+  if(text === "neue zeile"){
+    snapshot();
+    state.doc[state.activeId] = (state.doc[state.activeId]||"") + "\n";
+    render(); return true;
+  }
+
+  if(text === "stopp" || text === "stop" || text === "diktat beenden"){
+    stopRecognition(); return true;
+  }
+  if(text === "rückgängig" || text === "rueckgaengig"){ undo(); return true; }
+
+  if(text === "nächste sektion" || text === "naechste sektion"){
+    const list = TEMPLATES[state.template].sections;
+    const i = list.findIndex(s=>s.id===state.activeId);
+    if(i>=0 && i<list.length-1) setActive(list[i+1].id);
+    return true;
+  }
+  if(text === "vorherige sektion"){
+    const list = TEMPLATES[state.template].sections;
+    const i = list.findIndex(s=>s.id===state.activeId);
+    if(i>0) setActive(list[i-1].id);
+    return true;
+  }
+
+  let m;
+  // Vorlage wechseln
+  m = text.match(/^vorlage (schriftsatz|klage|brief|mandantenbrief|vermerk|aktenvermerk)$/);
+  if(m){
+    const map = {schriftsatz:"schriftsatz",klage:"schriftsatz",brief:"brief",mandantenbrief:"brief",vermerk:"vermerk",aktenvermerk:"vermerk"};
+    state.template = map[m[1]];
+    $tpl.value = state.template;
+    initDoc();
+    toast("Vorlage: " + TEMPLATES[state.template].title);
+    return true;
+  }
+
+  // Springe zu …
+  m = text.match(/^(?:springe? zu|gehe zu|zu) (.+)$/);
+  if(m){
+    const target = m[1].trim().toLowerCase();
+    const t = TEMPLATES[state.template];
+    let id = t.aliases[target];
+    if(!id){
+      const sec = t.sections.find(s=>s.label.toLowerCase()===target || s.id===target);
+      if(sec) id = sec.id;
+    }
+    if(id){ setActive(id); return true; }
+    toast("Sektion „"+target+"\" nicht gefunden");
+    return true;
+  }
+
+  // Ersetze X durch Y
+  m = raw.match(/^ersetz[e]? (.+?) durch (.+?)\.?$/i);
+  if(m){
+    const find = m[1].trim();
+    const repl = m[2].trim();
+    const cur = state.doc[state.activeId] || "";
+    if(cur.toLowerCase().includes(find.toLowerCase())){
+      snapshot();
+      const re = new RegExp(find.replace(/[-/\\^$*+?.()|[\]{}]/g,"\\$&"), "i");
+      state.doc[state.activeId] = cur.replace(re, repl);
+      render();
+      toast(`„${find}" → „${repl}"`);
+    } else {
+      toast(`„${find}" nicht in aktiver Sektion`);
+    }
+    return true;
+  }
+
+  // Lösche letzte(s|n) ...
+  if(text === "lösche letztes wort" || text === "loesche letztes wort"){
+    snapshot();
+    const cur = (state.doc[state.activeId]||"").trimEnd();
+    state.doc[state.activeId] = cur.replace(/\S+\s*$/, "");
+    render(); return true;
+  }
+  if(text === "lösche letzten satz" || text === "loesche letzten satz"){
+    snapshot();
+    const cur = (state.doc[state.activeId]||"").trimEnd();
+    // Find last sentence boundary
+    const idx = Math.max(cur.lastIndexOf("."), cur.lastIndexOf("!"), cur.lastIndexOf("?"));
+    state.doc[state.activeId] = idx>0 ? cur.slice(0, idx+1) : "";
+    render(); return true;
+  }
+  if(text === "lösche absatz" || text === "loesche absatz" || text === "lösche sektion"){
+    snapshot();
+    state.doc[state.activeId] = "";
+    render(); return true;
+  }
+
+  // KI Formulieren
+  if(text === "formulieren" || text === "ki formulieren" || text === "schön formulieren"){
+    formulateActive(); return true;
+  }
+
+  // Natürlich-sprachliche Korrekturanweisung → an KI
+  if(isAiEditIntent(raw)){
+    aiCorrect(raw);
+    return true;
+  }
+
+  return false;
+}
+
+/* ---------- Intent: natural-language correction ---------- */
+function isAiEditIntent(raw){
+  const t = raw.toLowerCase().trim();
+  // Direkte Korrektur-Verben am Satzanfang
+  if(/^(bitte\s+)?(korrigier|korrektur|ändere?|ändre|aende[rn]|streiche|entferne|lösche\s|loesche\s|tausche|ersetze|füg(e)?\s|fueg(e)?\s|schreibe\s+stattdessen|mache?\s+aus|anstelle\s+von|nimm\s+(?:das|den|die)\s|setze)/.test(t)) return true;
+  // Umschreibungen
+  if(/\bsoll(te)?\s+(heißen|heissen|sein|lauten|stehen)\b/.test(t)) return true;
+  if(/\bnicht\b.*\bsondern\b/.test(t)) return true;
+  if(/\bstattdessen\b/.test(t)) return true;
+  return false;
+}
+
+async function aiCorrect(instruction){
+  if(state.config.provider === "demo"){
+    log(`<span style="color:var(--warn)">⚠ KI-Korrektur erfordert konfigurierte KI (Einstellungen). Im Demo-Modus nicht verfügbar.</span>`);
+    toast("KI-Korrektur: Einstellungen öffnen");
+    return;
+  }
+  if(state.config.provider !== "custom" && !state.config.key){
+    log(`<span style="color:var(--warn)">⚠ Kein API-Key. Einstellungen → KI konfigurieren.</span>`);
+    toast("Kein API-Key konfiguriert");
+    return;
+  }
+  log(`<span class="cmd">🪄 KI-Korrektur läuft: ${escapeHtml(instruction)}</span>`);
+  setAiBusy(true);
+  try{
+    const result = await callAiEdit(state.config, instruction);
+    const edits = (result && result.edits) || [];
+    if(result && result.explanation && !edits.length){
+      log(`<span class="cmd">💬 KI: ${escapeHtml(result.explanation)}</span>`);
+      toast("KI: " + result.explanation);
+      return;
+    }
+    if(!edits.length){
+      log(`<span style="color:var(--warn)">⚠ Keine anwendbare Änderung gefunden</span>`);
+      return;
+    }
+    snapshot();
+    let applied = 0;
+    const failed = [];
+    for(const e of edits){
+      const id = e.section_id;
+      if(!Object.prototype.hasOwnProperty.call(state.doc, id)){
+        failed.push(`unbekannte Sektion „${id}"`); continue;
+      }
+      if(typeof e.new_text === "string"){
+        state.doc[id] = e.new_text;
+        applied++;
+      } else if(typeof e.find === "string" && typeof e.replace === "string" && e.find.length){
+        const cur = state.doc[id] || "";
+        if(cur.includes(e.find)){
+          state.doc[id] = cur.split(e.find).join(e.replace); applied++;
+        } else {
+          const re = new RegExp(escRe(e.find), "i");
+          if(re.test(cur)){ state.doc[id] = cur.replace(re, e.replace); applied++; }
+          else { failed.push(`„${e.find}" nicht gefunden in ${id}`); }
+        }
+      }
+    }
+    render();
+    log(`<span class="cmd">✓ ${applied} Änderung(en) angewendet${failed.length?` · ${failed.length} fehlgeschlagen`:""}</span>`);
+    if(result.explanation){
+      log(`<span class="cmd">💬 ${escapeHtml(result.explanation)}</span>`);
+    }
+    toast(applied ? `${applied} Änderung(en) übernommen` : "Keine Änderung übernommen");
+  }catch(err){
+    console.error(err);
+    log(`<span style="color:var(--err)">⚠ KI-Fehler: ${escapeHtml(err.message)}</span>`);
+    toast("KI-Korrektur fehlgeschlagen");
+  }finally{
+    setAiBusy(false);
+  }
+}
+
+function escRe(s){ return s.replace(/[-/\\^$*+?.()|[\]{}]/g,"\\$&"); }
+
+function setAiBusy(on){
+  const pill = document.getElementById("recPill");
+  if(on){
+    pill.classList.add("busy");
+    pill.querySelector("span:last-child").textContent = "KI denkt …";
+  } else {
+    pill.classList.remove("busy");
+    setRecUI(state.recording);
+  }
+}
+
+/* ---------- Speech Recognition ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let lastStartAt = 0;
+let consecutiveErrors = 0;
+let isInitializing = false;
+let recognitionGen = 0;   // generation counter — invalidates old instance handlers
+const $rec = document.getElementById("recBtn");
+const $recLabel = document.getElementById("recLabel");
+const $recPill = document.getElementById("recPill");
+const $transcript = document.getElementById("transcript");
+
+function log(html){
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  $transcript.appendChild(div);
+  $transcript.scrollTop = $transcript.scrollHeight;
+}
+
+const ERR_HINTS = {
+  "not-allowed":      'Mikro-Berechtigung wurde abgelehnt. In Chrome: Schloss-Icon links neben der URL → „Mikrofon" → erlauben.',
+  "service-not-allowed":"Spracherkennungs-Dienst nicht erlaubt — meist weil die Seite nicht über https:// oder http://localhost geladen wurde.",
+  "audio-capture":    "Kein Mikrofon gefunden. Prüfe Audio-Einstellungen des Systems.",
+  "no-speech":        "Längere Stille erkannt — Diktat pausiert.",
+  "network":          "Netzwerkfehler. Spracherkennung benötigt Online-Verbindung (Chrome nutzt Google-Server).",
+  "aborted":          "Erkennung wurde abgebrochen — meist weil die Seite über file:// läuft oder Mikro-Berechtigung fehlt.",
+  "language-not-supported":"Sprache de-DE nicht unterstützt vom Browser.",
+};
+
+async function preflight(){
+  // Detect file:// — Chrome blocks getUserMedia there
+  if(location.protocol === "file:"){
+    log(`<span style="color:var(--err)">⚠ Diese Seite läuft als <code>file://</code>. Chrome erlaubt Mikrofonzugriff dort nicht.</span>`);
+    log(`<span style="color:var(--warn)">→ Lösung: im Terminal <code>cd</code> in den Ordner, dann <code>python3 -m http.server 8000</code> und im Browser <code>http://localhost:8000/kanzlei-diktat.html</code> öffnen.</span>`);
+    return false;
+  }
+  // Pre-flight: try getUserMedia to trigger permission dialog explicitly
+  if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({audio:true});
+      // release immediately — SpeechRecognition manages its own stream
+      s.getTracks().forEach(t=>t.stop());
+      return true;
+    }catch(err){
+      log(`<span style="color:var(--err)">⚠ Mikrofonzugriff verweigert: ${escapeHtml(err.name||"")} ${escapeHtml(err.message||"")}</span>`);
+      log(`<span style="color:var(--warn)">${ERR_HINTS["not-allowed"]}</span>`);
+      return false;
+    }
+  }
+  return true;
+}
+
+async function startRecognition(){
+  if(!SR){
+    log(`<span style="color:var(--err)">⚠ Dein Browser unterstützt SpeechRecognition nicht.</span>`);
+    log(`<span style="color:var(--warn)">→ Bitte Chrome oder Edge verwenden (Safari/Firefox unterstützen die de-DE-Erkennung nicht zuverlässig).</span>`);
+    toast("Bitte Chrome oder Edge verwenden");
+    return;
+  }
+  if(isInitializing || state.recording) return;     // double-click guard
+  isInitializing = true;
+  $rec.disabled = true;
+
+  try{
+    // Pre-flight only on first start
+    if(!recognition){
+      const ok = await preflight();
+      if(!ok){ toast("Diktat nicht startbar — siehe Hinweise im Transcript"); return; }
+    }
+
+    // Tear down any old instance before creating a new one
+    if(recognition){
+      try{ recognition.onresult = recognition.onerror = recognition.onend = recognition.onstart = null; }catch(_){}
+      try{ recognition.abort(); }catch(_){}
+    }
+
+    // Build a fresh instance every start — safer than reusing
+    const myGen = ++recognitionGen;
+    const rec = new SR();
+    rec.lang = "de-DE";
+    rec.continuous = true;
+    rec.interimResults = true;
+    recognition = rec;
+
+    let interimNode = null;
+
+    rec.onstart = () => {
+      if(myGen !== recognitionGen) return;
+      consecutiveErrors = 0;
+      log(`<span class="cmd">▶ Diktat aktiv</span>`);
+    };
+
+    rec.onresult = (e) => {
+      if(myGen !== recognitionGen) return;
+      let interim = "";
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const r = e.results[i];
+        const txt = r[0].transcript;
+        if(r.isFinal){
+          if(tryCommand(txt)){
+            log(`<span class="cmd">⟢ Befehl: ${escapeHtml(txt.trim())}</span>`);
+          } else {
+            append(txt.trim());
+            log(`<span class="final">${escapeHtml(txt.trim())}</span>`);
+          }
+        } else {
+          interim += txt;
+        }
+      }
+      if(interimNode) interimNode.remove();
+      if(interim){
+        interimNode = document.createElement("div");
+        interimNode.className = "interim";
+        interimNode.textContent = "… " + interim;
+        $transcript.appendChild(interimNode);
+        $transcript.scrollTop = $transcript.scrollHeight;
+      } else {
+        interimNode = null;
+      }
+    };
+
+    rec.onerror = (e) => {
+      if(myGen !== recognitionGen) return;
+      consecutiveErrors++;
+      const hint = ERR_HINTS[e.error] || "";
+      log(`<span style="color:var(--err)">⚠ ${escapeHtml(e.error||"unbekannt")}${hint?" — "+escapeHtml(hint):""}</span>`);
+
+      const fatal = ["not-allowed","service-not-allowed","audio-capture","language-not-supported","bad-grammar"];
+      if(fatal.includes(e.error)){
+        state.recording = false;
+        setRecUI(false);
+        toast("Diktat gestoppt: " + e.error);
+        return;
+      }
+      if(consecutiveErrors >= 2){
+        state.recording = false;
+        setRecUI(false);
+        log(`<span style="color:var(--warn)">→ Auto-Restart deaktiviert nach ${consecutiveErrors} Fehlern. Bitte erneut „Diktat starten" klicken.</span>`);
+        return;
+      }
+    };
+
+    rec.onend = () => {
+      if(myGen !== recognitionGen) return;     // stale handler — ignore
+      if(interimNode){ interimNode.remove(); interimNode = null; }
+      if(!state.recording){ setRecUI(false); return; }
+      const wait = Math.max(0, 400 - (Date.now() - lastStartAt));
+      setTimeout(() => {
+        if(myGen !== recognitionGen || !state.recording) return;
+        try{
+          lastStartAt = Date.now();
+          rec.start();
+        }catch(err){
+          log(`<span style="color:var(--err)">⚠ Restart fehlgeschlagen: ${escapeHtml(err.message||String(err))}</span>`);
+          state.recording = false; setRecUI(false);
+        }
+      }, wait);
+    };
+
+    state.recording = true;
+    setRecUI(true);
+    try{
+      lastStartAt = Date.now();
+      rec.start();
+    }catch(err){
+      log(`<span style="color:var(--err)">⚠ Start fehlgeschlagen: ${escapeHtml(err.message||String(err))}</span>`);
+      state.recording = false;
+      setRecUI(false);
+    }
+  } finally {
+    isInitializing = false;
+    $rec.disabled = false;
+  }
+}
+
+function stopRecognition(){
+  state.recording = false;
+  recognitionGen++;        // invalidate handlers of the live instance
+  if(recognition){
+    try{ recognition.stop(); }catch(_){}
+    try{ recognition.abort(); }catch(_){}
+  }
+  setRecUI(false);
+}
+function setRecUI(on){
+  if(on){
+    $rec.classList.add("recording");
+    $recLabel.textContent = "Diktat läuft — Stopp";
+    $recPill.className = "pill live"; $recPill.querySelector("span:last-child").textContent = "Aufnahme";
+  } else {
+    $rec.classList.remove("recording");
+    $recLabel.textContent = "Diktat starten";
+    $recPill.className = "pill idle"; $recPill.querySelector("span:last-child").textContent = "Bereit";
+  }
+}
+$rec.addEventListener("click", ()=>{
+  if(state.recording) stopRecognition(); else startRecognition();
+});
+
+/* ---------- Diagnostics ---------- */
+function showEnvBanner(){
+  const b = document.getElementById("envBanner");
+  const probs = [];
+  if(location.protocol === "file:"){
+    probs.push("Diese Seite läuft als <code>file://</code> — Chrome blockiert Mikrofonzugriff. Starte einen lokalen Server: <code>python3 -m http.server 8000</code> im Datei-Ordner und öffne <code>http://localhost:8000/kanzlei-diktat.html</code>.");
+  }
+  if(!SR){
+    probs.push("Dein Browser unterstützt SpeechRecognition nicht. Bitte Chrome oder Edge verwenden.");
+  }
+  if(probs.length){
+    b.style.display = "block";
+    b.innerHTML = "<strong>⚠ Hinweis:</strong> " + probs.join("<br/><br/>");
+  }
+}
+showEnvBanner();
+
+document.getElementById("btnMicTest").addEventListener("click", async ()=>{
+  log(`<span class="cmd">— Mikro-Test —</span>`);
+  log(`Protokoll: <code>${location.protocol}</code> · Host: <code>${location.host || "(leer)"}</code>`);
+  log(`SpeechRecognition: <code>${SR ? "verfügbar" : "FEHLT"}</code>`);
+  log(`navigator.mediaDevices: <code>${navigator.mediaDevices ? "vorhanden" : "FEHLT"}</code>`);
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    log(`<span style="color:var(--err)">⚠ getUserMedia API nicht verfügbar (oft bei file:// oder altem Browser)</span>`);
+    return;
+  }
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({audio:true});
+    const tracks = s.getAudioTracks();
+    log(`<span style="color:var(--ok)">✓ Mikrofon zugreifbar — Track: ${escapeHtml(tracks[0]?.label||"(unbenannt)")}</span>`);
+    tracks.forEach(t=>t.stop());
+    toast("Mikrofon OK");
+  }catch(err){
+    log(`<span style="color:var(--err)">⚠ ${escapeHtml(err.name)}: ${escapeHtml(err.message)}</span>`);
+    toast("Mikrofon nicht zugreifbar");
+  }
+});
+
+document.getElementById("btnDiag").addEventListener("click", ()=>{
+  log(`<span class="cmd">— Diagnose —</span>`);
+  log(`UserAgent: <code>${escapeHtml(navigator.userAgent.slice(0,140))}</code>`);
+  log(`Sprache: <code>${escapeHtml(navigator.language)}</code> · Online: <code>${navigator.onLine}</code>`);
+  log(`Provider: <code>${escapeHtml(state.config.provider)}</code> · Modell: <code>${escapeHtml(state.config.model||"(leer)")}</code> · Key: <code>${state.config.key?"gesetzt":"FEHLT"}</code>`);
+  log(`Vorlage: <code>${escapeHtml(state.template)}</code> · Aktive Sektion: <code>${escapeHtml(state.activeId||"")}</code>`);
+});
+
+/* ---------- AI formulation ---------- */
+async function formulateActive(){
+  const sec = TEMPLATES[state.template].sections.find(s=>s.id===state.activeId);
+  if(!sec){ toast("Keine aktive Sektion"); return; }
+  const raw = state.doc[state.activeId] || "";
+  if(!raw.trim()){ toast("Sektion ist leer"); return; }
+  toast("KI formuliert …");
+  try{
+    const out = await callAI(state.config, sec, raw, state.template);
+    snapshot();
+    state.doc[state.activeId] = out.trim();
+    render();
+    toast("Sektion neu formuliert");
+  }catch(err){
+    console.error(err);
+    toast("KI-Fehler: "+err.message);
+  }
+}
+
+async function callAI(cfg, section, text, template){
+  if(cfg.provider === "demo"){
+    return demoFormulate(text, section);
+  }
+  const userPrompt = `Vorlage: ${TEMPLATES[template].title}\nSektion: ${section.label}\n\nRohtext (diktiert):\n"""\n${text}\n"""\n\nGib ausschließlich die überarbeitete Sektion zurück.`;
+  return await callAIRaw(cfg, cfg.system, userPrompt);
+}
+
+/** Generic transport: takes system + user prompt, returns text. */
+async function callAIRaw(cfg, systemPrompt, userMessage){
+  if(cfg.provider === "anthropic"){
+    if(!cfg.key) throw new Error("Kein API-Key in Einstellungen.");
+    const res = await fetch(cfg.url || "https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        "x-api-key": cfg.key,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true",
+      },
+      body: JSON.stringify({
+        model: cfg.model || "claude-sonnet-4-6",
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role:"user", content: userMessage }]
+      })
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    const j = await res.json();
+    return (j.content && j.content[0] && j.content[0].text) || "";
+  }
+
+  if(cfg.provider === "custom"){
+    if(!cfg.url) throw new Error("Keine URL in Einstellungen.");
+    const res = await fetch(cfg.url, {
+      method:"POST",
+      headers:{
+        "content-type":"application/json",
+        ...(cfg.key ? {"authorization": "Bearer "+cfg.key} : {}),
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages:[
+          { role:"system", content: systemPrompt },
+          { role:"user", content: userMessage },
+        ],
+        temperature: 0.3,
+      })
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    const j = await res.json();
+    return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
+  }
+
+  throw new Error("Unbekannter Provider");
+}
+
+/** Sends current document + correction instruction to AI, expects JSON edits. */
+async function callAiEdit(cfg, instruction){
+  const t = TEMPLATES[state.template];
+  const docState = t.sections.map(s => ({
+    id: s.id,
+    label: s.label,
+    kind: s.kind,
+    content: state.doc[s.id] || ""
+  }));
+  const sysPrompt =
+    "Du bist ein Korrektur-Werkzeug für deutsche juristische Dokumente. " +
+    "Der Anwalt diktiert eine Änderungsanweisung. Du bekommst das aktuelle Dokument als JSON " +
+    "(mit Sektionen) und die Anweisung. Gib AUSSCHLIESSLICH ein JSON-Objekt zurück, ohne Markdown-Fences, ohne Vorrede.\n\n" +
+    "Schema:\n" +
+    "{\n" +
+    "  \"edits\": [\n" +
+    "    {\"section_id\": \"<id>\", \"find\": \"<exakter Text>\", \"replace\": \"<Ersatz>\"}\n" +
+    "    // ODER:  {\"section_id\": \"<id>\", \"new_text\": \"<vollständiger neuer Sektionstext>\"}\n" +
+    "  ],\n" +
+    "  \"explanation\": \"kurze Erklärung auf Deutsch (max. 1 Satz)\"\n" +
+    "}\n\n" +
+    "Regeln:\n" +
+    "- 'find' muss EXAKT als Teilstring in der genannten Sektion vorkommen (Wortlaut identisch).\n" +
+    "- Bei mehrdeutigen Stellen die aktive Sektion bevorzugen.\n" +
+    "- Erfinde nichts, ändere nur was angewiesen wurde, bewahre alle anderen Inhalte.\n" +
+    "- Bei unklaren Anweisungen: edits = [] und in 'explanation' eine kurze Rückfrage formulieren.\n" +
+    "- 'new_text' nur verwenden, wenn die Sektion sehr kurz ist oder die Änderung umfangreich.";
+
+  const userMsg =
+    `Aktuelles Dokument:\n${JSON.stringify(docState, null, 2)}\n\n` +
+    `Aktive Sektion (Fokus): ${state.activeId}\n\n` +
+    `Anweisung: ${instruction}`;
+
+  const raw = await callAIRaw(cfg, sysPrompt, userMsg);
+  // robustes Parsing: ggf. Markdown-Fences entfernen, JSON-Block extrahieren
+  let cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+  if(cleaned[0] !== "{"){
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if(m) cleaned = m[0];
+  }
+  try{
+    return JSON.parse(cleaned);
+  }catch(e){
+    throw new Error("KI-Antwort ist kein gültiges JSON: " + raw.slice(0,120));
+  }
+}
+
+function demoFormulate(text, section){
+  // Tiny rule-based clean-up so the button does *something* without a key.
+  let t = text
+    .replace(/\bz\.?\s*b\.?\b/gi,"zum Beispiel")
+    .replace(/\bbzw\.?\b/gi,"beziehungsweise")
+    .replace(/\bggf\.?\b/gi,"gegebenenfalls")
+    .replace(/\bca\.?\b/gi,"circa")
+    .replace(/\s+,/g,",")
+    .replace(/\s+\./g,".")
+    .replace(/ +/g," ")
+    .trim();
+  // Capitalize sentences
+  t = t.replace(/(^|[\.!?]\s+)([a-zäöüß])/g, (_,p,c)=> p + c.toUpperCase());
+  // For Anträge: prepend if missing
+  if(section.id === "antraege" && !/^wir beantragen/i.test(t)){
+    t = "Wir beantragen,\n" + t;
+  }
+  if(section.id === "schluss" && !t) t = "Wir bitten um Termin zur mündlichen Verhandlung.";
+  return t;
+}
+
+/* ---------- Settings dialog ---------- */
+const $dlg = document.getElementById("settings");
+document.getElementById("btnSettings").addEventListener("click", ()=>{
+  document.getElementById("cfgProvider").value = state.config.provider;
+  document.getElementById("cfgUrl").value = state.config.url;
+  document.getElementById("cfgKey").value = state.config.key;
+  document.getElementById("cfgModel").value = state.config.model;
+  document.getElementById("cfgSystem").value = state.config.system;
+  $dlg.showModal();
+});
+document.getElementById("cfgSave").addEventListener("click", (e)=>{
+  e.preventDefault();
+  state.config = {
+    provider: document.getElementById("cfgProvider").value,
+    url: document.getElementById("cfgUrl").value.trim(),
+    key: document.getElementById("cfgKey").value.trim(),
+    model: document.getElementById("cfgModel").value.trim(),
+    system: document.getElementById("cfgSystem").value,
+  };
+  saveConfig();
+  toast("Einstellungen gespeichert");
+  $dlg.close();
+});
+
+/* ---------- Toolbar ---------- */
+document.getElementById("btnFormulate").addEventListener("click", formulateActive);
+document.getElementById("btnUndo").addEventListener("click", undo);
+document.getElementById("btnNew").addEventListener("click", ()=>{
+  if(confirm("Neues Dokument anlegen? Aktueller Inhalt geht verloren.")) initDoc();
+});
+$tpl.addEventListener("change", ()=>{ state.template = $tpl.value; initDoc(); });
+
+/* ---------- Export to .docx (minimal Word-XML) ---------- */
+document.getElementById("btnExport").addEventListener("click", exportDocx);
+
+function exportDocx(){
+  const t = TEMPLATES[state.template];
+  const parts = [`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${escapeXml(t.title)}</w:t></w:r></w:p>`];
+  for(const s of t.sections){
+    parts.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${escapeXml(s.label)}</w:t></w:r></w:p>`);
+    const txt = (state.doc[s.id]||"").trim();
+    const paragraphs = txt ? txt.split(/\n\n+/) : [""];
+    for(const para of paragraphs){
+      const lines = para.split("\n");
+      const runs = lines.map((ln,i)=>(i?`<w:br/>`:"")+`<w:t xml:space="preserve">${escapeXml(ln)}</w:t>`).join("");
+      parts.push(`<w:p><w:r>${runs}</w:r></w:p>`);
+    }
+  }
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>${parts.join("")}<w:sectPr/></w:body></w:document>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  // build minimal zip in-memory
+  const files = [
+    { name:"[Content_Types].xml", data: contentTypes },
+    { name:"_rels/.rels", data: rels },
+    { name:"word/document.xml", data: documentXml },
+  ];
+  const blob = makeZip(files);
+  const url = URL.createObjectURL(new Blob([blob], {type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}));
+  const a = document.createElement("a");
+  a.href = url; a.download = t.title.replace(/\s+/g,"_") + ".docx";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- Tiny ZIP (store, no compression) ---------- */
+function makeZip(files){
+  const enc = new TextEncoder();
+  const chunks = []; let offset = 0;
+  const central = [];
+  function crc32(buf){
+    let c, t = []; for(let n=0;n<256;n++){ c=n; for(let k=0;k<8;k++) c = c & 1 ? 0xedb88320 ^ (c>>>1) : (c>>>1); t[n]=c; }
+    let crc = 0xffffffff;
+    for(let i=0;i<buf.length;i++) crc = (crc>>>8) ^ t[(crc ^ buf[i]) & 0xff];
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+  for(const f of files){
+    const nameBuf = enc.encode(f.name);
+    const dataBuf = enc.encode(f.data);
+    const crc = crc32(dataBuf);
+    const local = new Uint8Array(30 + nameBuf.length + dataBuf.length);
+    const dv = new DataView(local.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true); dv.setUint16(6, 0, true);
+    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0, true);
+    dv.setUint32(14, crc, true);
+    dv.setUint32(18, dataBuf.length, true); dv.setUint32(22, dataBuf.length, true);
+    dv.setUint16(26, nameBuf.length, true); dv.setUint16(28, 0, true);
+    local.set(nameBuf, 30); local.set(dataBuf, 30+nameBuf.length);
+    chunks.push(local);
+    central.push({name:nameBuf, crc, size:dataBuf.length, offset});
+    offset += local.length;
+  }
+  let cdir = new Uint8Array(0);
+  let cdirSize = 0;
+  for(const c of central){
+    const rec = new Uint8Array(46 + c.name.length);
+    const dv = new DataView(rec.buffer);
+    dv.setUint32(0, 0x02014b50, true);
+    dv.setUint16(4, 20, true); dv.setUint16(6, 20, true);
+    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true);
+    dv.setUint16(12, 0, true); dv.setUint16(14, 0, true);
+    dv.setUint32(16, c.crc, true);
+    dv.setUint32(20, c.size, true); dv.setUint32(24, c.size, true);
+    dv.setUint16(28, c.name.length, true);
+    dv.setUint16(30, 0, true); dv.setUint16(32, 0, true);
+    dv.setUint16(34, 0, true); dv.setUint16(36, 0, true);
+    dv.setUint32(38, 0, true); dv.setUint32(42, c.offset, true);
+    rec.set(c.name, 46);
+    const merged = new Uint8Array(cdir.length + rec.length);
+    merged.set(cdir,0); merged.set(rec, cdir.length); cdir = merged;
+    cdirSize += rec.length;
+  }
+  const end = new Uint8Array(22);
+  const dv = new DataView(end.buffer);
+  dv.setUint32(0, 0x06054b50, true);
+  dv.setUint16(8, central.length, true); dv.setUint16(10, central.length, true);
+  dv.setUint32(12, cdirSize, true); dv.setUint32(16, offset, true);
+  // assemble
+  let total = offset + cdirSize + 22;
+  const out = new Uint8Array(total); let p=0;
+  for(const c of chunks){ out.set(c,p); p+=c.length; }
+  out.set(cdir, p); p += cdir.length;
+  out.set(end, p);
+  return out;
+}
+
+/* ---------- helpers ---------- */
+function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function escapeXml(s){ return s.replace(/[&<>'"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&apos;",'"':"&quot;"}[c])); }
+
+const $toast = document.getElementById("toast");
+let toastTimer;
+function toast(msg){
+  $toast.textContent = msg;
+  $toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>$toast.classList.remove("show"), 1800);
+}
+
+/* ---------- Boot ---------- */
+initDoc();
+</script>
+</body>
+</html>
